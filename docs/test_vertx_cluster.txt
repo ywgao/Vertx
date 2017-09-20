@@ -1,0 +1,62 @@
+Clustered Vert.x JUnit Test
+
+By default, the Vert.x JUnit test framework will provide a non-clustered instance of Vert.x for you to 
+execute tests against. For the most part that works fine. However, there are times when you need the 
+clustered version like when testing with shared maps or cluster-wide locks.
+
+We can easily change this default behavior by creating a Supplier as a parameter to the RunTestOnContext class.
+https://docs.oracle.com/javase/8/docs/api/java/util/function/Supplier.html
+http://vertx.io/docs/apidocs/io/vertx/ext/unit/junit/RunTestOnContext.html
+
+In the JUnit test class, create a supplier like this:
+
+private Supplier<Vertx> supplier = () -> {
+    CountDownLatch latch = new CountDownLatch(1);
+    AtomicReference<Vertx> vertx = new AtomicReference<>();
+    Vertx.clusteredVertx(new VertxOptions(), handler -> {
+      if (handler.succeeded()) {
+        vertx.set(handler.result());
+        latch.countDown();
+      } else {
+        throw new RuntimeException("Unable to create clustered Vertx");
+      }
+    });
+    try {
+      latch.await();
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
+    return vertx.get();
+  };
+  
+  
+This will create a clustered instance of Vert.x asynchronously, wait for the result and then 
+return it to the caller of the Supplier.
+
+Now create a Rule in you test class that uses this Supplier when creating the test context.
+
+@Rule
+public RunTestOnContext rule = new RunTestOnContext(supplier);
+
+
+Now you can create a test case that uses the clustered Vert.x like this.
+
+@Test
+public void testSharedData(TestContext context) {
+
+  //rule.vertx() will be clustered
+  SharedData sd = rule.vertx().sharedData();
+
+  sd.<String, String>getClusterWideMap("testmap", mapAsyncResult -> {
+    if (mapAsyncResult.succeeded()) {
+      AsyncMap<String, String> map = mapAsyncResult.result();
+      map.put("key", "value", putAsyncResult -> {
+        context.assertTrue(putAsyncResult.succeeded());
+        context.async().complete();
+      });
+    } else {
+      context.assertTrue(false);
+    }
+  });
+
+}
