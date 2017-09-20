@@ -1,5 +1,6 @@
 Clustered Vert.x JUnit Test
 
+https://diabolicallabs.com/category/vertx/
 By default, the Vert.x JUnit test framework will provide a non-clustered instance of Vert.x for you to 
 execute tests against. For the most part that works fine. However, there are times when you need the 
 clustered version like when testing with shared maps or cluster-wide locks.
